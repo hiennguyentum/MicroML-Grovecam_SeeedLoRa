@@ -1,7 +1,7 @@
 #include <EloquentSVMSMO.h>
 #include "Adafruit_TCS34725.h"
 
-#define MAX_TRAINING_SAMPLES 20
+#define MAX_TRAINING_SAMPLES 100
 #define FEATURES_DIM 3
 
 using namespace Eloquent::ML;
@@ -33,6 +33,9 @@ void setup() {
     classifier.setC(5);
     classifier.setTol(1e-5);
     classifier.setMaxIter(10000);
+
+    Serial.println("Type 'help' to see the available commands");
+    Serial.println();
 }
 
 void loop() {
@@ -48,43 +51,49 @@ void loop() {
         Serial.println("\tfit: train the classifier on a new set of samples");
         Serial.println("\tpredict: classify a new sample");
         Serial.println("\tinspect: print X_train and y_train");
+        Serial.println();
     }
     else if (command == "fit") {
         Serial.println("How many samples will you record? ");
         numSamples = readSerialNumber();
 
-        for (int i = 0; i < numSamples; i++) {
+        for (int i = 0; i < numSamples; i++) 
+        {
             Serial.print(i + 1);
             Serial.print("/");
             Serial.print(numSamples);
             Serial.println(" Which class does the sample belongs to, 1 or -1?");
             y_train[i] = readSerialNumber() > 0 ? 1 : -1;
+            Serial.print(y_train[i]);
+            Serial.println(" was select");
+            
             getFeatures(X_train[i]);
         }
 
-        Serial.print("Start training... ");
+        Serial.println("Training in progress ... ");
+        
         classifier.fit(X_train, y_train, numSamples);
         Serial.println("Done");
     }
     else if (command == "predict") {
-        int label;
         float x[FEATURES_DIM];
-
         getFeatures(x);
+        
         Serial.print("Predicted label is ");
         Serial.println(classifier.predict(X_train, x));
     }
     else if (command == "inspect") {
-        for (int i = 0; i < numSamples; i++) {
+        for (int i = 0; i < numSamples; i++) 
+        {
             Serial.print("[");
             Serial.print(y_train[i]);
             Serial.print("] ");
 
-            for (int j = 0; j < FEATURES_DIM; j++) {
+            for (int j = 0; j < FEATURES_DIM; j++) 
+            {
                 Serial.print(X_train[i][j]);
                 Serial.print(", ");
             }
-
             Serial.println();
         }
     }
@@ -116,15 +125,15 @@ void getFeatures(float x[FEATURES_DIM])
     Serial.println();
 }
 
-void readColorSensor(float x[2]) 
+void readColorSensor(float x[3]) 
 {
-    // Define RGB (for CSV) float
+    // Define RGB float
     float red, green, blue;
-//    tcs.setInterrupt(false);  // turn on LED
-//    delay(60);  // takes 60ms to read
+    tcs.setInterrupt(false);  // turn on LED
+    delay(60);  // takes 60ms to read
     tcs.getRGB(&red, &green, &blue);
-//    tcs.setInterrupt(true);  // turn off LED
-
+    tcs.setInterrupt(true);  // turn off LED
+    
     x[0] = red;
     x[1] = green;
     x[2] = blue;

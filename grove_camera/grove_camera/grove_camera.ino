@@ -12,10 +12,9 @@
 #include <arduino.h>
 
 // Camera Config
-#define PIC_PKT_LEN   128                  //data length of each read, dont set this too big because ram is limited
-#define CAM_ADDR      0
-#define LORA_SERIAL   Serial1
-#define SD_CS         4
+#define PIC_PKT_LEN    128                  //data length of each read, dont set this too big because ram is limited
+#define CAM_ADDR       0
+#define CAM_SERIAL     Serial1
 
 // JPEG Resolution => define int jpeg_resolution from camInitialize()
 #define JR_160x128   3
@@ -23,7 +22,7 @@
 #define JR_640x480   7
 
 // For Camera and Button
-File imgFile;                             // define SD card
+File myFile;                              // define SD card
 
 int picNameNum = 0;                       // picture name
 unsigned long picTotalLen = 0;            // picture size
@@ -33,7 +32,7 @@ const int buttonPin = A5;                 // the number of the pushbutton pin
 /* 
  *  For MicroML - Feature extraction and image downsizing
  */
- 
+
 // Resizing images and features extraction
 #define FRAME_SIZE FRAMESIZE_QQVGA
 #define WIDTH 160
@@ -55,18 +54,18 @@ const int buttonPin = A5;                 // the number of the pushbutton pin
 void setup()
 {
     Serial.begin(9600);
-    LORA_SERIAL.begin(9600);       //cant be faster than 9600, maybe difference with diff board.
+    CAM_SERIAL.begin(9600);       //cant be faster than 9600, maybe difference with diff board.
     
     while (!Serial) 
     {
-        ; // wait for serial port to connect. Needed for native USB port only
+    ; // wait for serial port to connect. Needed for native USB port only
     }
   
     pinMode(buttonPin, INPUT);    // initialize the pushbutton pin as an input
     Serial.print("\r\n Initializing SD card ....");
-    pinMode(SD_CS, OUTPUT);          // CS pin of SD Card Shield
+    pinMode(4,OUTPUT);          // CS pin of SD Card Shield
 
-    if (!SD.begin(SD_CS)) 
+    if (!SD.begin(4)) 
     {
         Serial.println("\r\n SD card initializing failed !! ");
         return;
@@ -90,28 +89,42 @@ void loop()
             delay(20);                               //Debounce
             if (digitalRead(buttonPin) == HIGH)
             {
-                Serial.print("\r\n Begin to take an image");
+                Serial.print("\r\n Begin to take picture");
                 delay(200);
                 if (n == 0); 
-                Capture();
-                //resPreview();
-                Serial.println("\r\n Saving image ....");
+                //Capture();
+                resPreview();
+                Serial.println("\r\n Saving picture....");
                 GetData();       
             }
-            Serial.print("\r\n Image successfully saved on SD card !!! Image number: ");
+            Serial.print("\r\n Successfully saved picture on SD card !!! Picture number: ");
             Serial.println(n);
             n++ ;
         }
     }
+
+//    if (!capture_still()) 
+//    {
+//        Serial.println("Failed capture");
+//        delay(2000);
+//
+//        return;
+//    }
+//
+//    // during training
+//    print_features();
+//    // durgin inference
+//    // classify();
+//    delay(3000);
 }
 
 /*********************************************************************/
 
 void clearRxBuf()
 {
-    while (LORA_SERIAL.available())
+    while (CAM_SERIAL.available())
     {
-        LORA_SERIAL.read();
+        CAM_SERIAL.read();
     }
 }
 
@@ -119,7 +132,7 @@ void clearRxBuf()
 
 void sendCmd(char cmd[], int cmd_len)
 {
-    for (char i = 0; i < cmd_len; i++) LORA_SERIAL.print(cmd[i]);
+    for (char i = 0; i < cmd_len; i++) CAM_SERIAL.print(cmd[i]);
 }
 
 /*********************************************************************/
@@ -130,18 +143,37 @@ int readBytes(char *dest, int len, unsigned int timeout)
   unsigned long t = millis();
   while (read_len < len)
   {
-    while (LORA_SERIAL.available() < 1)
+    while (CAM_SERIAL.available() < 1)
     {
       if ((millis() - t) > timeout)
       {
         return read_len;
       }
     }
-    *(dest + read_len) = LORA_SERIAL.read();
+    *(dest + read_len) = CAM_SERIAL.read();
     //Serial.write(*(dest+read_len));
     read_len++;
   }
   return read_len;
+}
+
+/*********************************************************************/
+
+void preCapture(int jpeg_resolution) // This fucntion is to define the image resolution that you want before capurting
+{   
+    // Set Image Resolution command
+    char cmd[] = { 0xaa, 0x01 | cameraAddr, 0x00, 0x00, 0x03, jpeg_resolution };
+    unsigned char resp[6];
+
+    Serial.setTimeout(100);
+    
+    while (1)
+    {
+        clearRxBuf();
+        sendCmd(cmd, 6);
+        if (readBytes((char *)resp, 6, 100) != 6) continue; 
+        if (resp[0] == 0xaa && resp[1] == (0x0e | cameraAddr) && resp[2] == 0x01 && resp[4] == 0 && resp[5] == 0) break;
+    }
 }
 
 /*********************************************************************/
@@ -197,25 +229,6 @@ void camInitialize()
 
 /*********************************************************************/
 
-void preCapture(int jpeg_resolution) // This fucntion is to define the image resolution that you want before capturing
-{   
-    // Set Image Resolution command
-    char cmd[] = { 0xaa, 0x01 | cameraAddr, 0x00, 0x00, 0x03, jpeg_resolution };
-    unsigned char resp[6];
-
-    Serial.setTimeout(100);
-    
-    while (1)
-    {
-        clearRxBuf();
-        sendCmd(cmd, 6);
-        if (readBytes((char *)resp, 6, 100) != 6) continue; 
-        if (resp[0] == 0xaa && resp[1] == (0x0e | cameraAddr) && resp[2] == 0x01 && resp[4] == 0 && resp[5] == 0) break;
-    }
-}
-
-/*********************************************************************/
-
 void Capture()
 {   
     // Get Picture command, 1 = snapshot, 2 = preview picture, 3 = JPEG Preview Picture
@@ -238,7 +251,7 @@ void Capture()
             }
             if (resp[0] == 0xaa && resp[1] == (0x0a | cameraAddr) && resp[2] == 0x01)
             {
-                picTotalLen = (resp[2]) | (resp[4] << 8); //| (resp[5] << 16)
+                picTotalLen = (resp[2]) | (resp[4] << 8) | (resp[5] << 16);
                 Serial.print("\r\n Size of the image: ");
                 Serial.print(picTotalLen);
                 Serial.println(" bytes");
@@ -282,86 +295,14 @@ void resPreview()
         }
     }
 }
-
 /*********************************************************************/
 
-void GetData()
-{
-    unsigned int pktCnt = (picTotalLen) / (PIC_PKT_LEN - 6);      // picture count
-    if ((picTotalLen % (PIC_PKT_LEN-6)) != 0) pktCnt += 1;
-    
-    char cmd[] = { 0xaa, 0x0e | cameraAddr, 0x00, 0x00, 0x00, 0x00 };
-    unsigned char pkt[PIC_PKT_LEN];
-
-    // Create a name for the new file in the format IMGxy.JPG
-    char picName[13]; // = "IMG00.jpg";
-    strcpy(picName, "IMG00.JPG");
-    for(int i = 0; i < 100; i++)
-    {
-      picName[3] = '0' + i/10;
-      picName[4] = '0' + i%10;
-
-      if (!SD.exists(picName))
-      {
-        break;
-        //SD.remove(picName);
-      }
-    }
-    
-    // Create a file with the name we created above and open it
-    imgFile = SD.open(picName, FILE_WRITE);
-    if(!imgFile)
-    {
-        Serial.print("\n imgFile open fail...");
-    }
-    else
-    {
-        Serial.setTimeout(100);
-        
-        for (unsigned int i = 0; i < pktCnt; i++)
-        {
-            cmd[4] = i & 0xff;
-            cmd[5] = (i >> 8) & 0xff;
-
-            int retry_cnt = 0;
-            retry:
-            delay(10);
-            clearRxBuf();
-            sendCmd(cmd, 6);
-            uint16_t cnt = readBytes((char *)pkt, PIC_PKT_LEN, 200); // at least 200ms delay
-
-            unsigned char sum = 0;
-            for (int y = 0; y < cnt - 2; y++)
-            {
-                sum += pkt[y];
-            }
-            
-            if (sum != pkt[cnt-2])
-            {
-                if (++retry_cnt < 100) goto retry;
-                else break;
-            }
-
-            //Serial.print("\r\n sum: ");
-            //Serial.print(sum);
-            
-            imgFile.write((const uint8_t *)&pkt[4], cnt-6);
-            //if (cnt != PIC_PKT_LEN) break;
-        }
-        cmd[4] = 0xf0;
-        cmd[5] = 0xf0;
-        sendCmd(cmd, 6);
-
-    }
-    imgFile.close();
-    picNameNum ++;
-}
-
-/*********************************************************************/
 /**
  * Capture image and do down-sampling
  */
- 
+
+
+
 //bool capture_still() {
 //    camera_fb_t *frame = esp_camera_fb_get();
 //
@@ -390,6 +331,72 @@ void GetData()
 //
 //    return true;
 //}
+
+/*********************************************************************/
+
+void GetData()
+{
+    unsigned int pktCnt = (picTotalLen) / (PIC_PKT_LEN - 6);      // picture count
+    if ((picTotalLen % (PIC_PKT_LEN-6)) != 0) pktCnt += 1;
+    
+    char cmd[] = { 0xaa, 0x0e | cameraAddr, 0x00, 0x00, 0x00, 0x00 };
+    unsigned char pkt[PIC_PKT_LEN];
+
+    char picName[] = "IMG00.jpg"; // "IMAGE00.jpg";
+    picName[3] = picNameNum/10 + '0';
+    picName[4] = picNameNum%10 + '1';
+
+    if (SD.exists(picName))
+    {
+        SD.remove(picName);
+    }
+
+    myFile = SD.open(picName, FILE_WRITE);
+    if(!myFile){
+        Serial.print("\nmyFile open fail...");
+    }
+    else{
+      
+        Serial.setTimeout(100);
+        
+        for (unsigned int i = 0; i < pktCnt; i++)
+        {
+            cmd[4] = i & 0xff;
+            cmd[5] = (i >> 8) & 0xff;
+
+            int retry_cnt = 0;
+            retry:
+            delay(10);
+            clearRxBuf();
+            sendCmd(cmd, 6);
+            uint16_t cnt = readBytes((char *)pkt, PIC_PKT_LEN, 200); // at least 200ms delay
+
+            unsigned char sum = 0;
+            for (int y = 0; y < cnt - 2; y++)
+            {
+                sum += pkt[y];
+            }
+
+            Serial.print("\r\n Sum: ");
+            Serial.print(sum);
+            
+            if (sum != pkt[cnt-2])
+            {
+                if (++retry_cnt < 100) goto retry;
+                else break;
+            }
+            
+            myFile.write((const uint8_t *)&pkt[4], cnt-6);
+            //if (cnt != PIC_PKT_LEN) break;
+        }
+        cmd[4] = 0xf0;
+        cmd[5] = 0xf0;
+        sendCmd(cmd, 6);
+
+    }
+    myFile.close();
+    picNameNum ++;
+}
 
 /*********************************************************************/
 
