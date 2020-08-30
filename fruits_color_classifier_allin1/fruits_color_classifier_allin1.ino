@@ -63,10 +63,11 @@ char buffer[256];           // char buffer for Cayenne
 // Array to map color index to a name
 const char* CLASSES[] = 
 {
+  "Apple",
+  "Empty",
   "Fig",
   "Lemon", 
-  "Lime", 
-  "Tomato"
+  "Lime"
 };
 
 
@@ -257,7 +258,7 @@ void loop()
     **/
     else if (command == "capture") 
     {
-        Serial.println("Input command: 'capture' registered ! ");       
+        Serial.println("'capture' command registered ! ");       
         Serial.println();
           
         String objName;
@@ -298,7 +299,7 @@ void loop()
     **/
     else if (command == "predict") 
     {
-        Serial.println("Input command: 'predict' registered ! ");       
+        Serial.println("'predict' command registered ! ");       
         Serial.println();
         
         float red, green, blue;                         // Float values for RGB data 
@@ -345,14 +346,14 @@ void loop()
     **/
     else if (command == "send") 
     {
-        Serial.println("Input command: 'send' registered ! ");       
+        Serial.println("'send' command registered ! ");       
         Serial.println();
         
         bool result = false;                            // Boolean for LoRa package transferring
         unsigned int nloops = 0;                        // Loop counting for sending LoRa package      
         float red, green, blue;                         // Float values for RGB data 
         readColorSensorData(&red, &green, &blue);       // Getting RGB data from sensor
-
+        
         // Print the data in CSV format
         Serial.println("Current RGB values from the sensor are: ");
         Serial.println((String) red + "," + green + "," + blue);
@@ -362,7 +363,7 @@ void loop()
         lpp.addAnalogOutput(1, int(red));          // Encodes the red value as float on channel 1 in Cayenne AnalogOutput format 
         lpp.addAnalogOutput(2, int(green));        // Encodes the green value as float on channel 2 in Cayenne AnalogOutput format 
         lpp.addAnalogOutput(3, int(blue));         // Encodes the blue value as float on channel 3 in Cayenne AnalogOutput format 
-
+         
         // Checking the data sending loop
         nloops++;
         if (Serial) 
