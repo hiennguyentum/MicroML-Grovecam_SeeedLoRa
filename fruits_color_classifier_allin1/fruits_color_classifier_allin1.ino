@@ -465,9 +465,3 @@ void readColorSensorData(float *r, float *g, float *b)
 
   return;
 }
-
-
-
-/** ------------------------------------------------------------------
- *  Function for 'capture' command
- **/
